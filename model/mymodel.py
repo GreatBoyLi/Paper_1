@@ -15,7 +15,7 @@ class MultiModalPVNet(nn.Module):
                                           transformer_dim=transformer_dim, transformer_depth=transformer_depth,
                                           ricnn_in_channels=ricnn_in_channels, roi_size=roi_size, final_dim=final_dim)
 
-        self.ts_branch = TimeSeriesBranch(final_dim=final_dim)
+        self.ts_branch = TimeSeriesBranch(depth=transformer_depth, final_dim=final_dim)
 
         self.predictor = nn.Sequential(
             nn.Linear(2 * final_dim, 256),

@@ -169,6 +169,7 @@ def main():
 
     model = MultiModalPVNet(
         final_dim=128,
+        transformer_depth=6,
         output_seq_len=4  # 预测未来4个时间步
     ).to(DEVICE)
     criterion = nn.MSELoss()
