@@ -73,15 +73,17 @@ class LinearSpatiotemporalTransformer(nn.Module):
             stride=(1, patch_size, patch_size)
         )
 
-        self.pos_embed = nn.Parameter(torch.randn(1, 16 * self.num_patches, embed_dim))
+        self.pos_embed = nn.Parameter(torch.randn(1, 16 * self.num_patches, embed_dim))  # 这个16是时间序列的长度
 
         # 🌟 修复点 1：使用刚写好的 TransformerBlock
         self.layers = nn.ModuleList([
-            TransformerBlock(dim=embed_dim, heads=4, dim_head=32)
+            TransformerBlock(dim=embed_dim, heads=6, dim_head=64)
             for _ in range(depth)
         ])
 
-        self.to_hidden_map = nn.Conv2d(embed_dim, out_channels, kernel_size=1)
+        # self.to_hidden_map = nn.Sequential(
+        #     nn.Conv2d(embed_dim, embed_dim // 2, kernel_size=1),
+        #     nn.ReLU(), )
 
     def forward(self, S_t):
         x = S_t.transpose(1, 2)
@@ -100,6 +102,6 @@ class LinearSpatiotemporalTransformer(nn.Module):
         H_t = H_t.permute(0, 3, 1, 2)
 
         H_t = F.interpolate(H_t, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
-        H_t = self.to_hidden_map(H_t)
+        # H_t = self.to_hidden_map(H_t)
 
         return H_t

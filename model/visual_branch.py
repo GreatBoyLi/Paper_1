@@ -11,14 +11,14 @@ class RICNN(nn.Module):
         super(RICNN, self).__init__()
         self.roi_size = roi_size
         self.roi_conv = nn.Sequential(
-            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.AdaptiveAvgPool2d((1, 1))
         )
-        self.fc = nn.Linear(64, out_dim)
+        self.fc = nn.Linear(128, out_dim)
 
     def forward(self, feature_map):
         b, c, h, w = feature_map.size()
@@ -36,16 +36,17 @@ class RICNN(nn.Module):
 # 4. 升级版的 VisualBranch
 # ==========================================
 class VisualBranch(nn.Module):
-    def __init__(self, input_channels=1, transformer_dim=128, ricnn_in_channels=16, roi_size=16, final_dim=128):
+    def __init__(self, input_channels=1, patch_size=8, img_size=9, transformer_dim=384, transformer_depth=3,
+                 ricnn_in_channels=16, roi_size=16, final_dim=128):
         super(VisualBranch, self).__init__()
 
         # 1. 全新强大的线性 Transformer (替代了原本的 ConvLSTM)
         self.transformer = LinearSpatiotemporalTransformer(
             in_channels=input_channels,
-            patch_size=8,  # 把 96x96 切成 8x8 的小块
+            patch_size=patch_size,  # 把 96x96 切成 8x8 的小块
             embed_dim=transformer_dim,
-            img_size=96,
-            depth=3,  # 堆叠 3 层 Transformer
+            img_size=img_size,
+            depth=transformer_depth,  # 堆叠 3 层 Transformer
             out_channels=ricnn_in_channels  # 完美对齐 RICNN 所需的输入通道数
         )
 

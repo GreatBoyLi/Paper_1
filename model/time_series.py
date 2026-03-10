@@ -13,7 +13,7 @@ class TimeSeriesBranch(nn.Module):
     处理历史数值数据 (如: Active Power, Clear-Sky GHI, Solar Zenith)
     """
 
-    def __init__(self, input_dim=3, seq_len=16, embed_dim=64, depth=2, heads=4, dim_head=16, final_dim=64):
+    def __init__(self, input_dim=3, seq_len=16, embed_dim=384, depth=3, heads=6, dim_head=64, final_dim=128):
         super().__init__()
 
         # 1. 独立特征映射 (Embedding): 将 3 维特征升维到 Transformer 喜欢的高维空间

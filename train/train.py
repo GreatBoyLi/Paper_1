@@ -168,8 +168,7 @@ def main():
     print(f"✅ 数据集加载完成: 训练集 {len(train_dataset)} 样本, 验证集 {len(val_dataset)} 样本")
 
     model = MultiModalPVNet(
-        visual_dim=32,  # 视觉特征维度
-        ts_dim=32,  # 数值特征维度
+        final_dim=128,
         output_seq_len=4  # 预测未来4个时间步
     ).to(DEVICE)
     criterion = nn.MSELoss()
