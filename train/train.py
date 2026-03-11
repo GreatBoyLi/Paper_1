@@ -13,7 +13,7 @@ from utils.config import load_config
 from utils.merics import evaluate_metrics
 from loss.loss import masked_mse_loss, DCCALoss
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 # ================= 配置区域 (Hyperparameters) =================
 # 加载配置
@@ -25,8 +25,8 @@ SAT_DIR = config["file_paths"]["aligned_satellite_path"]
 SAVE_DIR = "../checkpoints/"
 
 # 训练参数
-BATCH_SIZE = 64
-LEARNING_RATE = 1e-4
+BATCH_SIZE = 32
+LEARNING_RATE = 2e-4
 NUM_EPOCHS = 100
 PATIENCE = 100
 
