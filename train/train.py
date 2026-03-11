@@ -230,7 +230,7 @@ def main():
         if current_mape < best_mape:
             best_mape = current_mape
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_mape_model-RMSE:{current_rmse:.4f}-MAE{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%.pth"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_mape_model-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%.pth"))
             print(f"   ⭐ [MAPE 冠军] 创新低: {best_mape:.2f}%，模型已保存！")
 
         # 🏆 4. 评判 R (越大越好)
