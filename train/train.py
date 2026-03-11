@@ -25,7 +25,7 @@ SAT_DIR = config["file_paths"]["aligned_satellite_path"]
 SAVE_DIR = "../checkpoints/"
 
 # 训练参数
-BATCH_SIZE = 64
+BATCH_SIZE = 45
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
 PATIENCE = 100
@@ -216,28 +216,28 @@ def main():
         if current_rmse < best_rmse:
             best_rmse = current_rmse
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, "best_rmse_model.pth"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_rmse_model.pth-{best_rmse:.4f}-{best_mae:.4f}-{best_mape:.2f}%-{best_r:.2f}%"))
             print(f"   ⭐ [RMSE 冠军] 创新低: {best_rmse:.4f}，模型已保存！")
 
         # 🏆 2. 评判 MAE (越小越好)
         if current_mae < best_mae:
             best_mae = current_mae
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, "best_mae_model.pth"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_mae_model.pth-{best_rmse:.4f}-{best_mae:.4f}-{best_mape:.2f}%-{best_r:.2f}%"))
             print(f"   ⭐ [MAE  冠军] 创新低: {best_mae:.4f}，模型已保存！")
 
         # 🏆 3. 评判 MAPE (越小越好)
         if current_mape < best_mape:
             best_mape = current_mape
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, "best_mape_model.pth"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_mape_model.pth-{best_rmse:.4f}-{best_mae:.4f}-{best_mape:.2f}%-{best_r:.2f}%"))
             print(f"   ⭐ [MAPE 冠军] 创新低: {best_mape:.2f}%，模型已保存！")
 
         # 🏆 4. 评判 R (越大越好)
         if current_r > best_r:
             best_r = current_r
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, "best_r_model.pth"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_r_model.pth-{best_rmse:.4f}-{best_mae:.4f}-{best_mape:.2f}%-{best_r:.2f}%"))
             print(f"   🚀 [R 相关性冠军] 创新高: {best_r:.2f}%，模型已保存！")
 
         # 早停机制 (Early Stopping) 逻辑更新：
