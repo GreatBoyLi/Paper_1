@@ -37,7 +37,7 @@ class RICNN(nn.Module):
 # ==========================================
 class VisualBranch(nn.Module):
     def __init__(self, input_channels=1, patch_size=8, img_size=9, transformer_dim=384, transformer_depth=3,
-                 ricnn_in_channels=16, roi_size=16, final_dim=128):
+                 ricnn_in_channels=16, roi_size=16, final_dim=128, dropout=0.1):
         super(VisualBranch, self).__init__()
 
         # 1. 全新强大的线性 Transformer (替代了原本的 ConvLSTM)
@@ -47,7 +47,8 @@ class VisualBranch(nn.Module):
             embed_dim=transformer_dim,
             img_size=img_size,
             depth=transformer_depth,  # 堆叠 3 层 Transformer
-            out_channels=ricnn_in_channels  # 完美对齐 RICNN 所需的输入通道数
+            out_channels=ricnn_in_channels,  # 完美对齐 RICNN 所需的输入通道数
+            dropout=dropout
         )
 
         # 2. 负责聚焦电站的 RICNN

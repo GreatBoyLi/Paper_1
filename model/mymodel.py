@@ -7,15 +7,16 @@ from model.time_series import TimeSeriesBranch
 
 class MultiModalPVNet(nn.Module):
     def __init__(self, input_channels=1, patch_size=8, img_size=96, transformer_dim=384, transformer_depth=3,
-                 ricnn_in_channels=384, roi_size=16, final_dim=256, output_seq_len=4):
+                 ricnn_in_channels=384, roi_size=16, final_dim=256, output_seq_len=4, dropout=0.1):
         super(MultiModalPVNet, self).__init__()
 
         # 实例化升级后的视觉支路
         self.visual_branch = VisualBranch(input_channels=input_channels, patch_size=patch_size, img_size=img_size,
                                           transformer_dim=transformer_dim, transformer_depth=transformer_depth,
-                                          ricnn_in_channels=ricnn_in_channels, roi_size=roi_size, final_dim=final_dim)
+                                          ricnn_in_channels=ricnn_in_channels, roi_size=roi_size, final_dim=final_dim,
+                                          dropout=dropout)
 
-        self.ts_branch = TimeSeriesBranch(depth=transformer_depth, final_dim=final_dim)
+        self.ts_branch = TimeSeriesBranch(depth=transformer_depth, final_dim=final_dim, dropout=dropout)
 
         self.predictor = nn.Sequential(
             nn.Linear(2 * final_dim, 256),

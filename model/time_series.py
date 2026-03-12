@@ -13,7 +13,8 @@ class TimeSeriesBranch(nn.Module):
     处理历史数值数据 (如: Active Power, Clear-Sky GHI, Solar Zenith)
     """
 
-    def __init__(self, input_dim=3, seq_len=16, embed_dim=384, depth=3, heads=6, dim_head=64, final_dim=128):
+    def __init__(self, input_dim=3, seq_len=16, embed_dim=384, depth=3, heads=6, dim_head=64, final_dim=128,
+                 dropout=0.1):
         super().__init__()
 
         # 1. 独立特征映射 (Embedding): 将 3 维特征升维到 Transformer 喜欢的高维空间
@@ -23,9 +24,12 @@ class TimeSeriesBranch(nn.Module):
         # GRU 天生有顺序，但 Transformer 是“全连接”的，必须加位置编码防遗忘
         self.pos_embed = nn.Parameter(torch.randn(1, seq_len, embed_dim))
 
+        # 🌟 新增：位置编码后的 Dropout
+        self.pos_drop = nn.Dropout(p=dropout)
+
         # 3. 线性 Transformer 层堆叠
         self.layers = nn.ModuleList([
-            TransformerBlock(dim=embed_dim, heads=heads, dim_head=dim_head)
+            TransformerBlock(dim=embed_dim, heads=heads, dim_head=dim_head, dropout=dropout)
             for _ in range(depth)
         ])
 
@@ -42,6 +46,9 @@ class TimeSeriesBranch(nn.Module):
         # A. 嵌入与位置编码
         x = self.embed(x)  # -> (Batch, 16, embed_dim)
         x = x + self.pos_embed  # 加上时间顺序信息
+
+        # 🌟 在进入 Transformer Block 之前应用 Dropout
+        x = self.pos_drop(x)
 
         # B. Transformer 全局时序特征提取 (并行计算，比 GRU 快得多！)
         for block in self.layers:

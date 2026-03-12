@@ -40,10 +40,13 @@ class TransformerBlock(nn.Module):
     标准的 Pre-Norm Transformer 编码器块
     """
 
-    def __init__(self, dim, heads, dim_head):
+    def __init__(self, dim, heads, dim_head, dropout=0.1):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim)
         self.attn = LinearAttention(dim, heads=heads, dim_head=dim_head)
+
+        # 🌟 新增：用于残差连接前的 Dropout
+        self.drop = nn.Dropout(dropout)
 
         self.norm2 = nn.LayerNorm(dim)
         self.ff = nn.Sequential(
@@ -54,13 +57,13 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x):
         # 带有残差连接的 Pre-Norm 结构
-        x = x + self.attn(self.norm1(x))
-        x = x + self.ff(self.norm2(x))
+        x = x + self.drop(self.attn(self.norm1(x)))
+        x = x + self.drop(self.ff(self.norm2(x)))
         return x
 
 
 class LinearSpatiotemporalTransformer(nn.Module):
-    def __init__(self, in_channels=1, patch_size=8, embed_dim=128, img_size=96, depth=3, out_channels=16):
+    def __init__(self, in_channels=1, patch_size=8, embed_dim=128, img_size=96, depth=3, out_channels=16, dropout=0.1):
         super().__init__()
         self.patch_size = patch_size
         self.img_size = img_size
@@ -75,9 +78,12 @@ class LinearSpatiotemporalTransformer(nn.Module):
 
         self.pos_embed = nn.Parameter(torch.randn(1, 16 * self.num_patches, embed_dim))  # 这个16是时间序列的长度
 
+        # 🌟 新增：位置编码后的 Dropout
+        self.pos_drop = nn.Dropout(p=dropout)
+
         # 🌟 修复点 1：使用刚写好的 TransformerBlock
         self.layers = nn.ModuleList([
-            TransformerBlock(dim=embed_dim, heads=6, dim_head=64)
+            TransformerBlock(dim=embed_dim, heads=6, dim_head=64, dropout=dropout)
             for _ in range(depth)
         ])
 
@@ -92,6 +98,9 @@ class LinearSpatiotemporalTransformer(nn.Module):
 
         x = rearrange(x, 'b c t h w -> b (t h w) c')
         x = x + self.pos_embed[:, :x.shape[1], :]
+
+        # 🌟 在进入 Transformer Block 之前应用 Dropout
+        x = self.pos_drop(x)
 
         # 🌟 修复点 2：极其清爽的层级调用
         for block in self.layers:

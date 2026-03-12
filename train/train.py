@@ -29,6 +29,8 @@ BATCH_SIZE = 45
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
 PATIENCE = 100
+WEIGHT_DECAY = 1e-4
+DROPOUT = 0.1
 
 # 硬件设置
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -170,10 +172,11 @@ def main():
     model = MultiModalPVNet(
         final_dim=128,
         transformer_depth=6,
-        output_seq_len=4  # 预测未来4个时间步
+        output_seq_len=4,  # 预测未来4个时间步
+        dropout=DROPOUT
     ).to(DEVICE)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
     # 分别初始化四个指标的历史最佳记录
     # RMSE, MAE, MAPE 是越小越好，所以初始值设为正无穷大
@@ -216,28 +219,32 @@ def main():
         if current_rmse < best_rmse:
             best_rmse = current_rmse
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_rmse_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR,
+                                                        f"best_rmse_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   ⭐ [RMSE 冠军] 创新低: {best_rmse:.4f}，模型已保存！")
 
         # 🏆 2. 评判 MAE (越小越好)
         if current_mae < best_mae:
             best_mae = current_mae
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_mae_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR,
+                                                        f"best_mae_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   ⭐ [MAE  冠军] 创新低: {best_mae:.4f}，模型已保存！")
 
         # 🏆 3. 评判 MAPE (越小越好)
         if current_mape < best_mape:
             best_mape = current_mape
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_mape_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR,
+                                                        f"best_mape_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   ⭐ [MAPE 冠军] 创新低: {best_mape:.2f}%，模型已保存！")
 
         # 🏆 4. 评判 R (越大越好)
         if current_r > best_r:
             best_r = current_r
             any_improvement = True
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"best_r_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR,
+                                                        f"best_r_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   🚀 [R 相关性冠军] 创新高: {best_r:.2f}%，模型已保存！")
 
         # 早停机制 (Early Stopping) 逻辑更新：
