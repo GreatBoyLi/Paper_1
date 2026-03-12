@@ -30,6 +30,7 @@ LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
 PATIENCE = 100
 WEIGHT_DECAY = 1e-4
+DROPOUT = 0.1
 
 # 硬件设置
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -172,7 +173,7 @@ def main():
         final_dim=128,
         transformer_depth=6,
         output_seq_len=4,  # 预测未来4个时间步
-        dropout=0.1
+        dropout=DROPOUT
     ).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
