@@ -161,8 +161,8 @@ def main():
         print(f"❌ 错误: 找不到数据文件。请检查路径:\n CSV: {CSV_PATH}\n SAT: {SAT_DIR}")
         return
 
-    train_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='train', split_ratio=0.8)
-    val_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='val')
+    train_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='train', train_ratio=0.9, val_ratio=0.1)
+    val_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='val', train_ratio=0.9, val_ratio=0.1)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
