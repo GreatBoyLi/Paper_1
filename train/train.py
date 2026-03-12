@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt  # 【新增 1】导入绘图库
 # 导入我们自己写的模块
 from dataset.dataset import SatellitePVDataset
 from model.mymodel import MultiModalPVNet
-from utils.config import load_config
+from utils.config import load_config, setup_logger
 from utils.merics import evaluate_metrics
 from loss.loss import masked_mse_loss, DCCALoss
 
@@ -23,18 +23,22 @@ config = load_config("../config/config.yaml")
 CSV_PATH = config["file_paths"]["series_file"]
 SAT_DIR = config["file_paths"]["aligned_satellite_path"]
 SAVE_DIR = "../checkpoints/"
+TRAIN_RATIO = 0.8
+VAL_RATIO = 0.2
+
+logger = setup_logger(SAVE_DIR)
 
 # 训练参数
 BATCH_SIZE = 45
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
-PATIENCE = 100
+PATIENCE = 15
 WEIGHT_DECAY = 1e-4
 DROPOUT = 0.1
 
 # 硬件设置
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"🚀 使用设备: {DEVICE}")
+logger.info(f"🚀 使用设备: {DEVICE}")
 
 
 # ============================================================
@@ -149,25 +153,25 @@ def plot_loss_curve(train_losses, val_losses, save_path):
     # 保存图片
     plt.savefig(save_path, dpi=300)
     plt.close()  # 关闭画布释放内存
-    print(f"📈 损失曲线图已保存至: {save_path}")
+    logger.info(f"📈 损失曲线图已保存至: {save_path}")
 
 
 def main():
     if not os.path.exists(SAVE_DIR):
         os.makedirs(SAVE_DIR)
 
-    print("📂 正在加载数据集...")
+    logger.info("📂 正在加载数据集...")
     if not os.path.exists(CSV_PATH) or not os.path.exists(SAT_DIR):
-        print(f"❌ 错误: 找不到数据文件。请检查路径:\n CSV: {CSV_PATH}\n SAT: {SAT_DIR}")
+        logger.info(f"❌ 错误: 找不到数据文件。请检查路径:\n CSV: {CSV_PATH}\n SAT: {SAT_DIR}")
         return
 
-    train_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='train', train_ratio=0.9, val_ratio=0.1)
-    val_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='val', train_ratio=0.9, val_ratio=0.1)
+    train_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='train', train_ratio=TRAIN_RATIO, val_ratio=VAL_RATIO)
+    val_dataset = SatellitePVDataset(CSV_PATH, SAT_DIR, mode='val', train_ratio=TRAIN_RATIO, val_ratio=VAL_RATIO)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
 
-    print(f"✅ 数据集加载完成: 训练集 {len(train_dataset)} 样本, 验证集 {len(val_dataset)} 样本")
+    logger.info(f"✅ 数据集加载完成: 训练集 {len(train_dataset)} 样本, 验证集 {len(val_dataset)} 样本")
 
     model = MultiModalPVNet(
         final_dim=128,
@@ -192,19 +196,19 @@ def main():
     train_loss_history = []
     val_loss_history = []
 
-    print(f"🔥 开始训练 (Epochs: {NUM_EPOCHS})")
-    print("-" * 60)
+    logger.info(f"🔥 开始训练 (Epochs: {NUM_EPOCHS})")
+    logger.info("-" * 60)
 
     for epoch in range(NUM_EPOCHS):
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, DEVICE)
         val_loss, val_metrics = validate(model, val_loader, criterion, DEVICE)
-        print(val_metrics)
+        logger.info(val_metrics)
 
         # 【新增 4】记录每一轮的 Loss
         train_loss_history.append(train_loss)
         val_loss_history.append(val_loss)
 
-        print(f"Epoch [{epoch + 1}/{NUM_EPOCHS}] | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
+        logger.info(f"Epoch [{epoch + 1}/{NUM_EPOCHS}] | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
 
         # 获取当前 Epoch 的各项指标
         current_rmse = val_metrics['RMSE']
@@ -221,7 +225,7 @@ def main():
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
                                                         f"Epoch:{epoch + 1}-best_rmse_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
-            print(f"   ⭐ [RMSE 冠军] 创新低: {best_rmse:.4f}，模型已保存！")
+            logger.info(f"   ⭐ [RMSE 冠军] 创新低: {best_rmse:.4f}，模型已保存！")
 
         # 🏆 2. 评判 MAE (越小越好)
         if current_mae < best_mae:
@@ -229,7 +233,7 @@ def main():
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
                                                         f"Epoch:{epoch + 1}-best_mae_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
-            print(f"   ⭐ [MAE  冠军] 创新低: {best_mae:.4f}，模型已保存！")
+            logger.info(f"   ⭐ [MAE  冠军] 创新低: {best_mae:.4f}，模型已保存！")
 
         # 🏆 3. 评判 MAPE (越小越好)
         if current_mape < best_mape:
@@ -237,7 +241,7 @@ def main():
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
                                                         f"Epoch:{epoch + 1}-best_mape_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
-            print(f"   ⭐ [MAPE 冠军] 创新低: {best_mape:.2f}%，模型已保存！")
+            logger.info(f"   ⭐ [MAPE 冠军] 创新低: {best_mape:.2f}%，模型已保存！")
 
         # 🏆 4. 评判 R (越大越好)
         if current_r > best_r:
@@ -245,7 +249,7 @@ def main():
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
                                                         f"Epoch:{epoch + 1}-best_r_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
-            print(f"   🚀 [R 相关性冠军] 创新高: {best_r:.2f}%，模型已保存！")
+            logger.info(f"   🚀 [R 相关性冠军] 创新高: {best_r:.2f}%，模型已保存！")
 
         # 早停机制 (Early Stopping) 逻辑更新：
         # 只要这四个指标中有一个还在变好，我们就继续给模型机会
@@ -253,14 +257,14 @@ def main():
             patience_counter = 0
         else:
             patience_counter += 1
-            print(f"   ⏳ 所有四项指标均未提升 ({patience_counter}/{PATIENCE})")
+            logger.info(f"   ⏳ 所有四项指标均未提升 ({patience_counter}/{PATIENCE})")
 
         if patience_counter >= PATIENCE:
-            print(f"🛑 Early stopping triggered at epoch {epoch + 1}")
+            logger.info(f"🛑 Early stopping triggered at epoch {epoch + 1}")
             break
 
-    print("-" * 60)
-    print("🎉 训练结束！最佳模型已保存在:", os.path.join(SAVE_DIR, "best_model.pth"))
+    logger.info("-" * 60)
+    logger.info("🎉 训练结束！最佳模型已保存在:", os.path.join(SAVE_DIR, "best_model.pth"))
 
     # 【新增 5】调用绘图函数
     plot_save_path = os.path.join(SAVE_DIR, "loss_curve.png")
