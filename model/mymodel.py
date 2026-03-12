@@ -9,9 +9,8 @@ from model.visual_branch import RICNN
 
 class MultiModalPVNet(nn.Module):
     def __init__(self, input_channels=1, patch_size=8, img_size=96, transformer_dim=384,
-                 transformer_depth=3,  # 🌟 这里的 depth=3 将控制自注意力和交叉注意力的层数
-                 ricnn_in_channels=384, roi_size=16, final_dim=256, output_seq_len=4,
-                 heads=6, dim_head=64):
+                 transformer_depth=3, ricnn_in_channels=384, roi_size=16, final_dim=256, output_seq_len=4,
+                 heads=6, dim_head=64, dropout=0.1):
         super(MultiModalPVNet, self).__init__()
         self.img_size = img_size
         self.transformer_depth = transformer_depth
@@ -30,13 +29,13 @@ class MultiModalPVNet(nn.Module):
         # ================= 2. Stage 1: 多层独立自注意力 (深度特征提取) =================
         # 视觉支路：连续过 3 层自注意力
         self.visual_sa_layers = nn.ModuleList([
-            TransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head)
+            TransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head, dropout=dropout)
             for _ in range(transformer_depth)
         ])
 
         # 时序支路：连续过 3 层自注意力
         self.ts_sa_layers = nn.ModuleList([
-            TransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head)
+            TransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head, dropout=dropout)
             for _ in range(transformer_depth)
         ])
 
@@ -48,7 +47,7 @@ class MultiModalPVNet(nn.Module):
         # ================= 3. Stage 2: 多层交叉融合 (深度跨模态查询) =================
         # 让时间序列 (Q) 连续 3 次去跨模态查询云图 (K, V)，不断修正自己的特征
         self.cross_attn_layers = nn.ModuleList([
-            CrossTransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head)
+            CrossTransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head, dropout=dropout)
             for _ in range(transformer_depth)
         ])
 
@@ -57,7 +56,7 @@ class MultiModalPVNet(nn.Module):
             nn.LayerNorm(transformer_dim),
             nn.Linear(transformer_dim, 128),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(dropout),
             nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, output_seq_len),
