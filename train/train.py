@@ -220,7 +220,7 @@ def main():
             best_rmse = current_rmse
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
-                                                        f"best_rmse_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+                                                        f"Epoch:{epoch + 1}-best_rmse_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   ⭐ [RMSE 冠军] 创新低: {best_rmse:.4f}，模型已保存！")
 
         # 🏆 2. 评判 MAE (越小越好)
@@ -228,7 +228,7 @@ def main():
             best_mae = current_mae
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
-                                                        f"best_mae_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+                                                        f"Epoch:{epoch + 1}-best_mae_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   ⭐ [MAE  冠军] 创新低: {best_mae:.4f}，模型已保存！")
 
         # 🏆 3. 评判 MAPE (越小越好)
@@ -236,7 +236,7 @@ def main():
             best_mape = current_mape
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
-                                                        f"best_mape_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+                                                        f"Epoch:{epoch + 1}-best_mape_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   ⭐ [MAPE 冠军] 创新低: {best_mape:.2f}%，模型已保存！")
 
         # 🏆 4. 评判 R (越大越好)
@@ -244,7 +244,7 @@ def main():
             best_r = current_r
             any_improvement = True
             torch.save(model.state_dict(), os.path.join(SAVE_DIR,
-                                                        f"best_r_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
+                                                        f"Epoch:{epoch + 1}-best_r_model.pth-RMSE:{current_rmse:.4f}-MAE:{current_mae:.4f}-MAPE:{current_mape:.2f}%-R:{current_r:.2f}%"))
             print(f"   🚀 [R 相关性冠军] 创新高: {best_r:.2f}%，模型已保存！")
 
         # 早停机制 (Early Stopping) 逻辑更新：
