@@ -7,10 +7,9 @@ from utils.config import load_config
 
 
 class SatellitePVDataset(Dataset):
-    count = 0
     def __init__(self, csv_path, satellite_dir,
                  input_seq_len=16, output_seq_len=4,
-                 mode='train', split_ratio=0.8):
+                 mode='train', train_ratio=0.7, val_ratio=0.2):
         """
         Args:
             csv_path: 包含24小时全天候连续数据的 CSV 路径
@@ -29,15 +28,17 @@ class SatellitePVDataset(Dataset):
 
         # 2. 划分数据集
         n = len(self.df)
-        train_end = int(n * split_ratio)
-        val_end = int(n * (split_ratio + 0.2))
+        train_end = int(n * train_ratio)
+        val_end = int(n * (train_ratio + val_ratio))
 
         if mode == 'train':
             self.data = self.df.iloc[:train_end]
         elif mode == 'val':
             self.data = self.df.iloc[train_end:val_end]
-        else:  # test
+        elif mode == 'test':
             self.data = self.df.iloc[val_end:]
+        else:
+            raise ValueError(f"不支持的 mode: {mode}")
 
         # ==========================================
         # 🌟 核心修改 1：严格的时间连续性校验
