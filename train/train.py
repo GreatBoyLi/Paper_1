@@ -116,6 +116,10 @@ def validate(model, loader, criterion, device):
             valid_v_feat = v_feat[daytime_sample_mask]
             valid_t_feat = t_feat[daytime_sample_mask]
 
+            night_mask = zeniths > 86
+            # 再把夜晚的时段抹除
+            preds[night_mask] = 0.0
+
             # 如果这个 Batch 里至少有 2 个白天样本 (DCCA 算相关性至少需要 2 个样本)
             if valid_v_feat.size(0) > 1:
                 loss_dcca = criterion_dcca(valid_v_feat, valid_t_feat)
