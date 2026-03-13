@@ -23,8 +23,6 @@ config = load_config("../config/config.yaml")
 CSV_PATH = config["file_paths"]["series_file"]
 SAT_DIR = config["file_paths"]["aligned_satellite_path"]
 SAVE_DIR = "../checkpoints/"
-TRAIN_RATIO = 0.8
-VAL_RATIO = 0.2
 
 logger = setup_logger(SAVE_DIR)
 
@@ -35,6 +33,9 @@ NUM_EPOCHS = 100
 PATIENCE = 15
 WEIGHT_DECAY = 1e-4
 DROPOUT = 0.1
+TRAIN_RATIO = 0.8
+VAL_RATIO = 0.2
+SELF_DEPTH = 3
 
 # 硬件设置
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -175,7 +176,7 @@ def main():
 
     model = MultiModalPVNet(
         final_dim=128,
-        transformer_depth=6,
+        transformer_depth=SELF_DEPTH,
         output_seq_len=4,  # 预测未来4个时间步
         dropout=DROPOUT
     ).to(DEVICE)
