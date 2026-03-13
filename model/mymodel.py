@@ -8,12 +8,11 @@ from model.visual_branch import RICNN
 
 
 class MultiModalPVNet(nn.Module):
-    def __init__(self, input_channels=1, patch_size=8, img_size=96, transformer_dim=384,
-                 transformer_depth=3, ricnn_in_channels=384, roi_size=16, final_dim=256, output_seq_len=4,
-                 heads=6, dim_head=64, dropout=0.1):
+    def __init__(self, input_channels=1, patch_size=8, img_size=96, transformer_dim=384, self_depth=3, cross_depth=3,
+                 ricnn_in_channels=384, roi_size=16, final_dim=256, output_seq_len=4, heads=6, dim_head=64,
+                 dropout=0.1):
         super(MultiModalPVNet, self).__init__()
         self.img_size = img_size
-        self.transformer_depth = transformer_depth
 
         # ================= 1. Token 提取器 =================
         # 视觉 Patch 嵌入
@@ -30,13 +29,13 @@ class MultiModalPVNet(nn.Module):
         # 视觉支路：连续过 3 层自注意力
         self.visual_sa_layers = nn.ModuleList([
             TransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head, dropout=dropout)
-            for _ in range(transformer_depth)
+            for _ in range(self_depth)
         ])
 
         # 时序支路：连续过 3 层自注意力
         self.ts_sa_layers = nn.ModuleList([
             TransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head, dropout=dropout)
-            for _ in range(transformer_depth)
+            for _ in range(self_depth)
         ])
 
         # 🛠️ DCCA 约束用的辅助提取头 (截留融合前的深层独立特征)
@@ -48,7 +47,7 @@ class MultiModalPVNet(nn.Module):
         # 让时间序列 (Q) 连续 3 次去跨模态查询云图 (K, V)，不断修正自己的特征
         self.cross_attn_layers = nn.ModuleList([
             CrossTransformerBlock(dim=transformer_dim, heads=heads, dim_head=dim_head, dropout=dropout)
-            for _ in range(transformer_depth)
+            for _ in range(cross_depth)
         ])
 
         # ================= 4. 最终单一预测头 =================
@@ -116,7 +115,7 @@ if __name__ == "__main__":
     dummy_nums = torch.randn(batch_size, seq_len, 3)
 
     # 显式指定深度为 3
-    model = MultiModalPVNet(transformer_depth=3, output_seq_len=4)
+    model = MultiModalPVNet(self_depth=6, cross_depth=6, output_seq_len=4)
     model.eval()
 
     with torch.no_grad():
