@@ -39,9 +39,9 @@ class MultiModalPVNet(nn.Module):
         ])
 
         # 🛠️ DCCA 约束用的辅助提取头 (截留融合前的深层独立特征)
-        self.v_to_hidden_map = nn.Conv2d(transformer_dim, ricnn_in_channels, kernel_size=1)
-        self.ricnn = RICNN(in_channels=ricnn_in_channels, roi_size=roi_size, out_dim=final_dim)
-        self.t_intermediate_head = nn.Sequential(nn.LayerNorm(transformer_dim), nn.Linear(transformer_dim, final_dim))
+        # self.v_to_hidden_map = nn.Conv2d(transformer_dim, ricnn_in_channels, kernel_size=1)
+        # self.ricnn = RICNN(in_channels=ricnn_in_channels, roi_size=roi_size, out_dim=final_dim)
+        # self.t_intermediate_head = nn.Sequential(nn.LayerNorm(transformer_dim), nn.Linear(transformer_dim, final_dim))
 
         # ================= 3. Stage 2: 多层交叉融合 (深度跨模态查询) =================
         # 让时间序列 (Q) 连续 3 次去跨模态查询云图 (K, V)，不断修正自己的特征
@@ -81,14 +81,14 @@ class MultiModalPVNet(nn.Module):
         for sa_block in self.ts_sa_layers:
             t_tokens = sa_block(t_tokens)
 
-        # 🌟 截流点：在最高层（第 3 层）提取完美独立特征，送给 DCCA 计算正交约束！
-        v_img = rearrange(v_tokens, 'b (t h w) c -> b t h w c', t=T, h=H_p, w=W_p)
-        v_img = v_img[:, -1, :, :, :].permute(0, 3, 1, 2)
-        v_img = F.interpolate(v_img, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
-        v_img = self.v_to_hidden_map(v_img)
-        v_feat = self.ricnn(v_img)  # -> (Batch, final_dim)
-
-        t_feat = self.t_intermediate_head(t_tokens[:, -1, :])  # -> (Batch, final_dim)
+        # # 🌟 截流点：在最高层（第 3 层）提取完美独立特征，送给 DCCA 计算正交约束！
+        # v_img = rearrange(v_tokens, 'b (t h w) c -> b t h w c', t=T, h=H_p, w=W_p)
+        # v_img = v_img[:, -1, :, :, :].permute(0, 3, 1, 2)
+        # v_img = F.interpolate(v_img, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+        # v_img = self.v_to_hidden_map(v_img)
+        # v_feat = self.ricnn(v_img)  # -> (Batch, final_dim)
+        #
+        # t_feat = self.t_intermediate_head(t_tokens[:, -1, :])  # -> (Batch, final_dim)
 
         # --- 3. Stage 2: 3 层早期交叉融合 (Deep Cross Attention) ---
         # 此时的 t_tokens 变成了 fust_tokens，它将在 3 层网络中反复去视觉 v_tokens 里“淘宝”
@@ -102,7 +102,7 @@ class MultiModalPVNet(nn.Module):
         preds = self.predictor(final_out)
 
         # 返回 preds 给回归 Loss，返回独立的 v_feat 和 t_feat 给 DCCA Loss
-        return preds, v_feat, t_feat
+        return preds#, v_feat, t_feat
 
 
 # 测试块
@@ -119,13 +119,14 @@ if __name__ == "__main__":
     model.eval()
 
     with torch.no_grad():
-        output, v_f, t_f = model(dummy_imgs, dummy_nums)
+        # output, v_f, t_f = model(dummy_imgs, dummy_nums)
+        output = model(dummy_imgs, dummy_nums)
 
     print(f"\n📥 输入云图 : {dummy_imgs.shape}")
     print(f"📥 输入数值 : {dummy_nums.shape}")
     print(f"📤 最终预测 : {output.shape} (预期为 Batch={batch_size}, 预测步数=4)")
-    print(f"🧬 DCCA 独立视觉特征: {v_f.shape}")
-    print(f"🧬 DCCA 独立时序特征: {t_f.shape}")
+    # print(f"🧬 DCCA 独立视觉特征: {v_f.shape}")
+    # print(f"🧬 DCCA 独立时序特征: {t_f.shape}")
 
     if output.shape == (batch_size, 4):
         print("\n✅ 测试成功！模型已具备深层 3x3 Attention 结构！")

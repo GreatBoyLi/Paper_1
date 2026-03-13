@@ -28,7 +28,7 @@ SAVE_DIR = "../checkpoints/"
 logger = setup_logger(SAVE_DIR)
 
 # 训练参数
-BATCH_SIZE = 32
+BATCH_SIZE = 50
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
 PATIENCE = 100
@@ -66,19 +66,19 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         # 计算多目标 Loss
         # 🌟 2. 筛选出属于“白天”的样本，才送去算 DCCA
         # 只要这个样本的预测窗口里有任意一个时刻 <= 85°，我们就认为它包含了白天特征
-        daytime_sample_mask = (zeniths <= 86.0).any(dim=1)
-        # 提取白天样本的特征
-        valid_v_feat = v_feat[daytime_sample_mask]
-        valid_t_feat = t_feat[daytime_sample_mask]
-
-        # 如果这个 Batch 里至少有 2 个白天样本 (DCCA 算相关性至少需要 2 个样本)
-        if valid_v_feat.size(0) > 1:
-            loss_dcca = criterion_dcca(valid_v_feat, valid_t_feat)
-        else:
-            loss_dcca = torch.tensor(0.0, device=device)
+        # daytime_sample_mask = (zeniths <= 86.0).any(dim=1)
+        # # 提取白天样本的特征
+        # valid_v_feat = v_feat[daytime_sample_mask]
+        # valid_t_feat = t_feat[daytime_sample_mask]
+        #
+        # # 如果这个 Batch 里至少有 2 个白天样本 (DCCA 算相关性至少需要 2 个样本)
+        # if valid_v_feat.size(0) > 1:
+        #     loss_dcca = criterion_dcca(valid_v_feat, valid_t_feat)
+        # else:
+        #     loss_dcca = torch.tensor(0.0, device=device)
         # loss = criterion(preds, targets)
         # 论文总损失公式
-        loss = loss_mse + lambda_c * loss_dcca
+        loss = loss_mse  # + lambda_c * loss_dcca
         loss.backward()
         optimizer.step()
 
@@ -110,20 +110,27 @@ def validate(model, loader, criterion, device):
             # loss_mse = criterion_mse(preds, targets)  # 预测准不准
             loss_mse = masked_mse_loss(preds, targets, zeniths)
 
-            # 计算多目标 Loss
-            # 🌟 2. 筛选出属于“白天”的样本，才送去算 DCCA
-            # 只要这个样本的预测窗口里有任意一个时刻 <= 85°，我们就认为它包含了白天特征
-            daytime_sample_mask = (zeniths <= 86.0).any(dim=1)
-            # 提取白天样本的特征
-            valid_v_feat = v_feat[daytime_sample_mask]
-            valid_t_feat = t_feat[daytime_sample_mask]
 
-            # 如果这个 Batch 里至少有 2 个白天样本 (DCCA 算相关性至少需要 2 个样本)
-            if valid_v_feat.size(0) > 1:
-                loss_dcca = criterion_dcca(valid_v_feat, valid_t_feat)
-            else:
-                loss_dcca = torch.tensor(0.0, device=device)
-            loss = loss_mse + lambda_c * loss_dcca
+            # 3. 物理后处理：创建夜晚掩码
+            # 如果天顶角 > 86°，说明太阳已落山或在地平线以下
+            night_mask = zeniths > 86
+            # 把夜晚的时段抹除
+            preds[night_mask] = 0.0
+
+            # # 计算多目标 Loss
+            # # 🌟 2. 筛选出属于“白天”的样本，才送去算 DCCA
+            # # 只要这个样本的预测窗口里有任意一个时刻 <= 85°，我们就认为它包含了白天特征
+            # daytime_sample_mask = (zeniths <= 86.0).any(dim=1)
+            # # 提取白天样本的特征
+            # valid_v_feat = v_feat[daytime_sample_mask]
+            # valid_t_feat = t_feat[daytime_sample_mask]
+            #
+            # # 如果这个 Batch 里至少有 2 个白天样本 (DCCA 算相关性至少需要 2 个样本)
+            # if valid_v_feat.size(0) > 1:
+            #     loss_dcca = criterion_dcca(valid_v_feat, valid_t_feat)
+            # else:
+            #     loss_dcca = torch.tensor(0.0, device=device)
+            loss = loss_mse  # + lambda_c * loss_dcca
             running_loss += loss.item()
 
             # 🌟 新增：把数据转移到 CPU 并存入列表，防止撑爆显存
