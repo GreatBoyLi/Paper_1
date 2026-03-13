@@ -57,7 +57,8 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         zeniths = batch['y_zenith'].to(device)  # 🌟 拿到天顶角
 
         optimizer.zero_grad()
-        preds, v_feat, t_feat = model(imgs, nums)
+        # preds, v_feat, t_feat = model(imgs, nums)
+        preds = model(imgs, nums)
 
         # 🌟 1. 计算 Masked MSE (不管黑夜的死活，只算白天的预测误差)
         # loss_mse = criterion_mse(preds, targets)  # 预测准不准
@@ -83,7 +84,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         optimizer.step()
 
         running_loss += loss.item()
-        loop.set_postfix(loss=loss.item(), loss_mse=loss_mse.item(), loss_dcca=loss_dcca.item())
+        loop.set_postfix(loss=loss.item())  # , loss_mse=loss_mse.item(), loss_dcca=loss_dcca.item())
 
     return running_loss / len(loader)
 
@@ -103,13 +104,13 @@ def validate(model, loader, criterion, device):
             targets = batch['y'].to(device)
             zeniths = batch['y_zenith'].to(device)  # 🌟 拿到天顶角
 
-            preds, v_feat, t_feat = model(imgs, nums)
+            # preds, v_feat, t_feat = model(imgs, nums)
+            preds = model(imgs, nums)
 
             # 计算 Loss
             # 🌟 1. 计算 Masked MSE (不管黑夜的死活，只算白天的预测误差)
             # loss_mse = criterion_mse(preds, targets)  # 预测准不准
             loss_mse = masked_mse_loss(preds, targets, zeniths)
-
 
             # 3. 物理后处理：创建夜晚掩码
             # 如果天顶角 > 86°，说明太阳已落山或在地平线以下
@@ -283,7 +284,7 @@ def main():
             break
 
     logger.info("-" * 60)
-    logger.info("🎉 训练结束！最佳模型已保存在:", os.path.join(SAVE_DIR, "best_model.pth"))
+    logger.info("🎉 训练结束！最佳模型已保存在: %s", os.path.join(SAVE_DIR, "best_model.pth"))
 
     # 【新增 5】调用绘图函数
     plot_save_path = os.path.join(SAVE_DIR, "loss_curve.png")
