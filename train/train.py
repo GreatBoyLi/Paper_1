@@ -189,6 +189,9 @@ def main():
     ).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    # 🌟 新增：余弦退火学习率调度器
+    # T_max 设置为总 Epoch 数，eta_min 是学习率的下限（比如降到原学习率的 1%）
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=LEARNING_RATE * 0.01)
 
     # 分别初始化四个指标的历史最佳记录
     # RMSE, MAE, MAPE 是越小越好，所以初始值设为正无穷大
@@ -211,6 +214,11 @@ def main():
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, DEVICE)
         val_loss, val_metrics = validate(model, val_loader, criterion, DEVICE)
         logger.info(val_metrics)
+
+        # 告诉调度器：“一个 Epoch 结束了，请按照余弦曲线把学习率降一点吧！”
+        scheduler.step()
+        # 获取当前刚刚被降下来的学习率
+        current_lr = optimizer.param_groups[0]['lr']
 
         # 【新增 4】记录每一轮的 Loss
         train_loss_history.append(train_loss)
