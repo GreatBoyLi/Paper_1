@@ -83,7 +83,7 @@ class LinearSpatiotemporalTransformer(nn.Module):
 
         # 🌟 修复点 1：使用刚写好的 TransformerBlock
         self.layers = nn.ModuleList([
-            TransformerBlock(dim=embed_dim, heads=6, dim_head=64, dropout=dropout)
+            TransformerBlock_new(dim=embed_dim, heads=6, dim_head=64, dropout=dropout)
             for _ in range(depth)
         ])
 
@@ -114,3 +114,80 @@ class LinearSpatiotemporalTransformer(nn.Module):
         # H_t = self.to_hidden_map(H_t)
 
         return H_t
+
+
+# ==========================================
+# 新增：融入 TCN 灵魂的卷积前馈网络 (ConvFFN)
+# ==========================================
+class ConvFFN(nn.Module):
+    """
+    带有局部感受野的卷积前馈网络
+    完美平替传统 Transformer 中的纯 Linear FFN
+    """
+
+    def __init__(self, dim, expansion_factor=4, kernel_size=3):
+        super().__init__()
+        inner_dim = dim * expansion_factor
+
+        # 1. 升维
+        self.fc1 = nn.Linear(dim, inner_dim)
+
+        # 2. 深度可分离卷积 (Depthwise Conv1d)：专门捕捉相邻时间步的“局部突变”
+        # padding=kernel_size//2 保证序列长度不变
+        # groups=inner_dim 极大降低参数量，防止过拟合
+        self.conv = nn.Conv1d(
+            in_channels=inner_dim,
+            out_channels=inner_dim,
+            kernel_size=kernel_size,
+            padding=kernel_size // 2,
+            groups=inner_dim
+        )
+
+        # 3. 激活函数与降维
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(inner_dim, dim)
+
+    def forward(self, x):
+        # x shape: (Batch, Seq_Len, Dim)
+        x = self.fc1(x)
+
+        # 为了适应 Conv1d，必须把维度转成 (Batch, Channels, Seq_Len)
+        x = rearrange(x, 'b n d -> b d n')
+
+        # 提取局部时间/空间的平滑与突变特征
+        x = self.conv(x)
+
+        # 换回 Transformer 喜欢的形状 (Batch, Seq_Len, Dim)
+        x = rearrange(x, 'b d n -> b n d')
+
+        x = self.act(x)
+        x = self.fc2(x)
+        return x
+
+
+# ==========================================
+# 升级版：融合全局与局部的 ConvTransformerBlock
+# ==========================================
+class TransformerBlock_new(nn.Module):
+    """
+    全局注意力 + 局部卷积 的终极融合块
+    (由于主程序调用的名字叫 TransformerBlock，我们直接复用这个名字，方便你无缝替换)
+    """
+
+    def __init__(self, dim, heads, dim_head, kernel_size=3, dropout=0.1):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(dim)
+        self.drop = nn.Dropout(dropout)
+        # 全局视野：Linear Attention 捕捉长程依赖
+        self.attn = LinearAttention(dim, heads=heads, dim_head=dim_head)
+
+        self.norm2 = nn.LayerNorm(dim)
+        # 局部视野：ConvFFN 捕捉光伏/云层的瞬时突变
+        self.ff = ConvFFN(dim=dim, kernel_size=kernel_size)
+
+    def forward(self, x):
+        # Stage 1: 全局信息交流
+        x = x + self.drop(self.attn(self.norm1(x)))
+        # Stage 2: 局部特征提炼
+        x = x + self.drop(self.ff(self.norm2(x)))
+        return x

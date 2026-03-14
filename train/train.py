@@ -30,7 +30,7 @@ logger = setup_logger(SAVE_DIR)
 BATCH_SIZE = 45
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
-PATIENCE = 15
+PATIENCE = 100
 WEIGHT_DECAY = 1e-4
 DROPOUT = 0.1
 TRAIN_RATIO = 0.8
@@ -186,6 +186,9 @@ def main():
     ).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    # 🌟 新增：余弦退火学习率调度器
+    # T_max 设置为总 Epoch 数，eta_min 是学习率的下限（比如降到原学习率的 1%）
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=LEARNING_RATE * 0.01)
 
     # 分别初始化四个指标的历史最佳记录
     # RMSE, MAE, MAPE 是越小越好，所以初始值设为正无穷大
@@ -209,11 +212,17 @@ def main():
         val_loss, val_metrics = validate(model, val_loader, criterion, DEVICE)
         logger.info(val_metrics)
 
+        # 告诉调度器：“一个 Epoch 结束了，请按照余弦曲线把学习率降一点吧！”
+        scheduler.step()
+        # 获取当前刚刚被降下来的学习率
+        current_lr = optimizer.param_groups[0]['lr']
+
         # 【新增 4】记录每一轮的 Loss
         train_loss_history.append(train_loss)
         val_loss_history.append(val_loss)
 
-        logger.info(f"Epoch [{epoch + 1}/{NUM_EPOCHS}] | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
+        logger.info(
+            f"Epoch [{epoch + 1}/{NUM_EPOCHS}] | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | LR: {current_lr}")
 
         # 获取当前 Epoch 的各项指标
         current_rmse = val_metrics['RMSE']
