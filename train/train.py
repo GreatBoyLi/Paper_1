@@ -221,7 +221,8 @@ def main():
         train_loss_history.append(train_loss)
         val_loss_history.append(val_loss)
 
-        logger.info(f"Epoch [{epoch + 1}/{NUM_EPOCHS}] | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
+        logger.info(
+            f"Epoch [{epoch + 1}/{NUM_EPOCHS}] | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | LR: {current_lr}")
 
         # 获取当前 Epoch 的各项指标
         current_rmse = val_metrics['RMSE']
