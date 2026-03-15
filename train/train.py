@@ -286,7 +286,7 @@ def main():
             break
 
     logger.info("-" * 60)
-    logger.info(f"🎉 训练结束！最佳模型已保存在: {os.path.join(SAVE_DIR, "best_model.pth")}")
+    logger.info("🎉 训练结束！最佳模型已保存在: %s", os.path.join(SAVE_DIR, "best_model.pth"))
 
     # 【新增 5】调用绘图函数
     plot_save_path = os.path.join(SAVE_DIR, "loss_curve.png")
