@@ -28,12 +28,12 @@ SAVE_DIR = "../checkpoints/"
 logger = setup_logger(SAVE_DIR)
 
 # 训练参数
-BATCH_SIZE = 50
+BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
 PATIENCE = 100
 WEIGHT_DECAY = 1e-4
-DROPOUT = 0.4
+DROPOUT = 0.3
 TRAIN_RATIO = 0.8
 VAL_RATIO = 0.2
 SELF_DEPTH = 3
@@ -195,7 +195,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     # 🌟 新增：余弦退火学习率调度器
     # T_max 设置为总 Epoch 数，eta_min 是学习率的下限（比如降到原学习率的 1%）
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=LEARNING_RATE * 0.01)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=LEARNING_RATE * 0.001)
 
     # 分别初始化四个指标的历史最佳记录
     # RMSE, MAE, MAPE 是越小越好，所以初始值设为正无穷大
