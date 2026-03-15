@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt  # 【新增 1】导入绘图库
 # 导入我们自己写的模块
 from dataset.dataset import SatellitePVDataset
 from model.mymodel import MultiModalPVNet
-from utils.config import load_config, setup_logger
+from utils.config import load_config, setup_logger, plot_metrics_curve, plot_loss_curve
 from utils.merics import evaluate_metrics
 from loss.loss import masked_mse_loss, DCCALoss
 
@@ -143,24 +143,6 @@ def validate(model, loader, criterion, device):
     return running_loss / len(loader), metrics
 
 
-# 【新增 2】绘图函数
-def plot_loss_curve(train_losses, val_losses, save_path):
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_losses, label='Training Loss', color='blue', linewidth=2)
-    plt.plot(val_losses, label='Validation Loss', color='red', linestyle='--', linewidth=2)
-
-    plt.title('Training and Validation Loss Over Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss (MSE)')
-    plt.legend()
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-
-    # 保存图片
-    plt.savefig(save_path, dpi=300)
-    plt.close()  # 关闭画布释放内存
-    logger.info(f"📈 损失曲线图已保存至: {save_path}")
-
-
 def main():
     if not os.path.exists(SAVE_DIR):
         os.makedirs(SAVE_DIR)
@@ -204,6 +186,12 @@ def main():
     train_loss_history = []
     val_loss_history = []
 
+    # 🌟 新增：用于存储每轮的四个指标
+    rmse_hist = []
+    mae_hist = []
+    mape_hist = []
+    r_hist = []
+
     logger.info(f"🔥 开始训练 (Epochs: {NUM_EPOCHS})")
     logger.info("-" * 60)
 
@@ -229,6 +217,12 @@ def main():
         current_mae = val_metrics['MAE']
         current_mape = val_metrics['MAPE(%)']
         current_r = val_metrics['R(%)']
+
+        # 🌟 新增：记录到历史列表中
+        rmse_hist.append(current_rmse)
+        mae_hist.append(current_mae)
+        mape_hist.append(current_mape)
+        r_hist.append(current_r)
 
         # 设置一个标志位，只要有任何一个指标破纪录了，就重置早停计数器
         any_improvement = False
@@ -290,7 +284,9 @@ def main():
 
     # 【新增 5】调用绘图函数
     plot_save_path = os.path.join(SAVE_DIR, "loss_curve.png")
-    plot_loss_curve(train_loss_history, val_loss_history, plot_save_path)
+    metrics_save_path = os.path.join(SAVE_DIR, "metrics_curve.png")
+    plot_loss_curve(train_loss_history, val_loss_history, plot_save_path, logger)
+    plot_metrics_curve(rmse_hist, mae_hist, mape_hist, r_hist, metrics_save_path, logger)
 
 
 if __name__ == "__main__":
