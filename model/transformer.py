@@ -76,7 +76,7 @@ class LinearSpatiotemporalTransformer(nn.Module):
             stride=(1, patch_size, patch_size)
         )
 
-        self.pos_embed = nn.Parameter(torch.randn(1, 16 * self.num_patches, embed_dim))  # 这个16是时间序列的长度
+        self.time_pos_embed = nn.Parameter(torch.randn(1, 16, 1, embed_dim))  # 这个16是时间序列的长度
         self.space_pos_embed = nn.Parameter(torch.randn(1, 1, self.num_patches, embed_dim))
 
         # 🌟 新增：位置编码后的 Dropout
