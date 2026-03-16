@@ -19,7 +19,9 @@ class MultiModalPVNet(nn.Module):
         self.v_patch_embed = nn.Conv3d(input_channels, transformer_dim, kernel_size=(1, patch_size, patch_size),
                                        stride=(1, patch_size, patch_size))
         num_patches = (img_size // patch_size) ** 2
-        self.v_pos_embed = nn.Parameter(torch.randn(1, 16 * num_patches, transformer_dim))
+        # 视觉分支新增的解耦时空编码 (4维和4维)
+        self.time_pos_embed = nn.Parameter(torch.randn(1, 16, 1, transformer_dim))
+        self.space_pos_embed = nn.Parameter(torch.randn(1, 1, num_patches, transformer_dim))
 
         # 时序 Linear 嵌入
         self.t_embed = nn.Linear(3, transformer_dim)
@@ -39,8 +41,13 @@ class MultiModalPVNet(nn.Module):
         ])
 
         # 🛠️ DCCA 约束用的辅助提取头 (截留融合前的深层独立特征)
-        self.v_to_hidden_map = nn.Conv2d(transformer_dim, ricnn_in_channels, kernel_size=1)
-        self.ricnn = RICNN(in_channels=ricnn_in_channels, roi_size=roi_size, out_dim=final_dim)
+        # self.v_to_hidden_map = nn.Conv2d(transformer_dim, ricnn_in_channels, kernel_size=1)
+        # self.ricnn = RICNN(in_channels=ricnn_in_channels, roi_size=roi_size, out_dim=final_dim)
+        # ✅ 新增：使用规范的 LayerNorm + Linear 映射头
+        self.v_intermediate_head = nn.Sequential(
+            nn.LayerNorm(transformer_dim),
+            nn.Linear(transformer_dim, final_dim)
+        )
         self.t_intermediate_head = nn.Sequential(nn.LayerNorm(transformer_dim), nn.Linear(transformer_dim, final_dim))
 
         # ================= 3. Stage 2: 多层交叉融合 (深度跨模态查询) =================
@@ -66,8 +73,11 @@ class MultiModalPVNet(nn.Module):
         x_v = x_images.transpose(1, 2)
         x_v = self.v_patch_embed(x_v)
         B, C, T, H_p, W_p = x_v.shape
-        v_tokens = rearrange(x_v, 'b c t h w -> b (t h w) c')
-        v_tokens = v_tokens + self.v_pos_embed[:, :v_tokens.shape[1], :]
+        # Forward 阶段相加：
+        x_v = rearrange(x_v, 'b c t h w -> b t (h w) c')
+        # time_pos_embed 取 [:T] 是为了防止某些 batch (比如最后不足 16 个的) 报错
+        x_v = x_v + self.time_pos_embed[:, :T, :, :] + self.space_pos_embed
+        v_tokens = rearrange(x_v, 'b t p c -> b (t p) c')
 
         t_tokens = self.t_embed(x_numeric)
         t_tokens = t_tokens + self.t_pos_embed
@@ -82,11 +92,22 @@ class MultiModalPVNet(nn.Module):
             t_tokens = sa_block(t_tokens)
 
         # 🌟 截流点：在最高层（第 3 层）提取完美独立特征，送给 DCCA 计算正交约束！
-        v_img = rearrange(v_tokens, 'b (t h w) c -> b t h w c', t=T, h=H_p, w=W_p)
-        v_img = v_img[:, -1, :, :, :].permute(0, 3, 1, 2)
-        v_img = F.interpolate(v_img, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
-        v_img = self.v_to_hidden_map(v_img)
-        v_feat = self.ricnn(v_img)  # -> (Batch, final_dim)
+        # v_img = rearrange(v_tokens, 'b (t h w) c -> b t h w c', t=T, h=H_p, w=W_p)
+        # v_img = v_img[:, -1, :, :, :].permute(0, 3, 1, 2)
+        # v_img = F.interpolate(v_img, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+        # v_img = self.v_to_hidden_map(v_img)
+        # v_feat = self.ricnn(v_img)  # -> (Batch, final_dim)
+        # ✅ 替换为高效的全局平均池化 (Global Average Pooling)：
+        # 1. 先把 v_tokens 还原回 (Batch, Time, Patches, Dim) 的形状
+        num_patches = H_p * W_p
+        v_tokens_reshaped = rearrange(v_tokens, 'b (t p) c -> b t p c', t=T, p=num_patches)
+
+        # 2. 提取最后一个时间步 ([:, -1, :, :])，然后在 Patches 维度求均值 (.mean(dim=1))
+        # 此时形状从 (Batch, Patches, Dim) 变成了浓缩的 (Batch, Dim)
+        v_feat_pooled = v_tokens_reshaped[:, -1, :, :].mean(dim=1)
+
+        # 3. 通过全连接层映射到 final_dim 送给 DCCA 对齐
+        v_feat = self.v_intermediate_head(v_feat_pooled)
 
         t_feat = self.t_intermediate_head(t_tokens[:, -1, :])  # -> (Batch, final_dim)
 

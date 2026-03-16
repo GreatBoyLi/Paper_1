@@ -36,8 +36,11 @@ WEIGHT_DECAY = 1e-4
 DROPOUT = 0.3
 TRAIN_RATIO = 0.8
 VAL_RATIO = 0.2
-SELF_DEPTH = 3
-CROSS_DEPTH = 3
+SELF_DEPTH = 2
+CROSS_DEPTH = 2
+FINAL_DIM = 64
+TRANSFORMER_DIM = 128
+HEADS = 4
 
 # 硬件设置
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -58,6 +61,14 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
 
         optimizer.zero_grad()
         preds, v_feat, t_feat = model(imgs, nums)
+
+        # =========================================================
+        # ✅ 新增：在计算 Loss 之前，强行抹平网络对黑夜的预测值
+        # 注意：训练阶段必须用 torch.where，不能用 preds[mask] = 0
+        # 否则会破坏自动求导的计算图导致 RuntimeError
+        # =========================================================
+        night_mask = zeniths > 86.0
+        preds = torch.where(night_mask, torch.zeros_like(preds), preds)
 
         # 🌟 1. 计算 Masked MSE (不管黑夜的死活，只算白天的预测误差)
         # loss_mse = criterion_mse(preds, targets)  # 预测准不准
@@ -163,7 +174,9 @@ def main():
     logger.info(f"✅ 数据集加载完成: 训练集 {len(train_dataset)} 样本, 验证集 {len(val_dataset)} 样本")
 
     model = MultiModalPVNet(
-        final_dim=128,
+        final_dim=FINAL_DIM,
+        transformer_dim=TRANSFORMER_DIM,
+        heads=HEADS,
         self_depth=SELF_DEPTH,
         cross_depth=CROSS_DEPTH,
         output_seq_len=4,  # 预测未来4个时间步
