@@ -55,10 +55,10 @@ class DCCALoss(nn.Module):
         c_diff = (C - torch.eye(C.size(0), device=C.device)).pow(2)
 
         # 提取对角线部分的误差 (迫使模态对齐)
-        on_diag_loss = torch.diag(c_diff).sum()
+        on_diag_loss = torch.diag(c_diff).mean()
 
         # 提取非对角线部分的误差 (去除特征内部冗余)
-        off_diag_loss = c_diff.sum() - on_diag_loss
+        off_diag_loss = c_diff.mean() - on_diag_loss
 
         # 总损失
         loss = on_diag_loss + self.lambd * off_diag_loss

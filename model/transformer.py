@@ -76,7 +76,8 @@ class LinearSpatiotemporalTransformer(nn.Module):
             stride=(1, patch_size, patch_size)
         )
 
-        self.pos_embed = nn.Parameter(torch.randn(1, 16 * self.num_patches, embed_dim))  # 这个16是时间序列的长度
+        self.time_pos_embed = nn.Parameter(torch.randn(1, 16, 1, embed_dim))  # 这个16是时间序列的长度
+        self.space_pos_embed = nn.Parameter(torch.randn(1, 1, self.num_patches, embed_dim))
 
         # 🌟 新增：位置编码后的 Dropout
         self.pos_drop = nn.Dropout(p=dropout)
@@ -96,11 +97,12 @@ class LinearSpatiotemporalTransformer(nn.Module):
         x = self.patch_embed(x)
         B, C, T, H_p, W_p = x.shape
 
-        x = rearrange(x, 'b c t h w -> b (t h w) c')
-        x = x + self.pos_embed[:, :x.shape[1], :]
+        x_v = rearrange(x, 'b c t h w -> b t (h w) c')
+        x_v = x_v + self.time_pos_embed + self.space_pos_embed
+        v_tokens = rearrange(x_v, 'b t p c -> b (t p) c')
 
         # 🌟 在进入 Transformer Block 之前应用 Dropout
-        x = self.pos_drop(x)
+        x = self.pos_drop(v_tokens)
 
         # 🌟 修复点 2：极其清爽的层级调用
         for block in self.layers:
@@ -110,7 +112,73 @@ class LinearSpatiotemporalTransformer(nn.Module):
         H_t = x[:, -1, :, :, :]
         H_t = H_t.permute(0, 3, 1, 2)
 
-        H_t = F.interpolate(H_t, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+        # H_t = F.interpolate(H_t, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
         # H_t = self.to_hidden_map(H_t)
 
         return H_t
+
+
+# ==========================================
+# 新增：O(N) 复杂度的线性交叉注意力机制
+# ==========================================
+class LinearCrossAttention(nn.Module):
+    def __init__(self, dim, heads=6, dim_head=64):
+        super().__init__()
+        inner_dim = dim_head * heads
+        self.heads = heads
+
+        # Q 来自时间序列，KV 来自卫星云图
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(inner_dim, dim)
+
+    def forward(self, x_q, x_kv):
+        # x_q: (B, N_q, D) 时间序列 Tokens
+        # x_kv: (B, N_kv, D) 视觉空间 Tokens
+        q = self.to_q(x_q)
+        k, v = self.to_kv(x_kv).chunk(2, dim=-1)
+
+        q = rearrange(q, 'b n (h d) -> b h n d', h=self.heads)
+        k = rearrange(k, 'b n (h d) -> b h n d', h=self.heads)
+        v = rearrange(v, 'b n (h d) -> b h n d', h=self.heads)
+
+        # 线性化核函数
+        q = F.elu(q) + 1.0
+        k = F.elu(k) + 1.0
+
+        # 矩阵乘法结合律改变
+        kv = torch.einsum('b h n d, b h n m -> b h d m', k, v)
+        z = 1 / (torch.einsum('b h n d, b h d -> b h n', q, k.sum(dim=2)) + 1e-6)
+        out = torch.einsum('b h n d, b h d m, b h n -> b h n m', q, kv, z)
+
+        out = rearrange(out, 'b h n d -> b n (h d)')
+        return self.to_out(out)
+
+
+class CrossTransformerBlock(nn.Module):
+    """
+    专门处理模态融合的交叉注意力块
+    """
+
+    def __init__(self, dim, heads, dim_head, dropout=0.1):
+        super().__init__()
+        self.norm_q = nn.LayerNorm(dim)
+        self.norm_kv = nn.LayerNorm(dim)
+        self.cross_attn = LinearCrossAttention(dim, heads=heads, dim_head=dim_head)
+
+        # 🌟 新增 Dropout
+        self.drop = nn.Dropout(dropout)
+
+        self.norm_ff = nn.LayerNorm(dim)
+        self.ff = nn.Sequential(
+            nn.Linear(dim, dim * 4),
+            nn.GELU(),
+            nn.Linear(dim * 4, dim)
+        )
+
+    def forward(self, x_q, x_kv):
+        # 时序 (Q) 主动去查询 视觉 (KV)
+        attn_out = self.cross_attn(self.norm_q(x_q), self.norm_kv(x_kv))
+        x_q = x_q + self.drop(attn_out)
+        x_q = x_q + self.drop(self.ff(self.norm_ff(x_q)))
+        return x_q
