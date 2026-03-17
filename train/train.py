@@ -32,7 +32,7 @@ BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 100
 PATIENCE = 100
-WEIGHT_DECAY = 1e-4
+WEIGHT_DECAY = 1e-3
 DROPOUT = 0.3
 TRAIN_RATIO = 0.8
 VAL_RATIO = 0.2
@@ -45,7 +45,7 @@ logger.info(f"🚀 使用设备: {DEVICE}")
 
 
 # ============================================================
-def train_one_epoch(model, loader, criterion, optimizer, device):
+def train_one_epoch(model, loader, criterion, optimizer, device, scheduler):
     model.train()
     running_loss = 0.0
     loop = tqdm(loader, desc="Training", leave=False)
@@ -82,6 +82,9 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         loss = loss_mse  # + lambda_c * loss_dcca
         loss.backward()
         optimizer.step()
+
+        # ✅ 新增：每个 Batch 更新完权重后，微调一次学习率
+        scheduler.step()
 
         running_loss += loss.item()
         loop.set_postfix(loss=loss.item())  # , loss_mse=loss_mse.item(), loss_dcca=loss_dcca.item())
@@ -174,10 +177,17 @@ def main():
         dropout=DROPOUT
     ).to(DEVICE)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    # 🌟 新增：余弦退火学习率调度器
-    # T_max 设置为总 Epoch 数，eta_min 是学习率的下限（比如降到原学习率的 1%）
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=LEARNING_RATE * 0.001)
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    # 2. 使用 OneCycleLR (自带 Warmup 和平滑余弦衰减)
+    # max_lr 可以比原来稍微激进一点，比如 3e-4，因为有了 Warmup 保护
+    scheduler = optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=3e-4,
+        epochs=NUM_EPOCHS,
+        steps_per_epoch=len(train_loader),  # 必须传入每个 epoch 的 batch 数量
+        pct_start=0.1,  # 前 10% 的时间 (即前 10 个 Epoch) 用于 Warmup 预热
+        anneal_strategy='cos'  # 后续 90% 的时间进行余弦衰减
+    )
 
     # 分别初始化四个指标的历史最佳记录
     # RMSE, MAE, MAPE 是越小越好，所以初始值设为正无穷大
@@ -203,12 +213,9 @@ def main():
     logger.info("-" * 60)
 
     for epoch in range(NUM_EPOCHS):
-        train_loss = train_one_epoch(model, train_loader, criterion, optimizer, DEVICE)
+        train_loss = train_one_epoch(model, train_loader, criterion, optimizer, DEVICE, scheduler)
         val_loss, val_metrics = validate(model, val_loader, criterion, DEVICE)
         logger.info(val_metrics)
-
-        # 告诉调度器：“一个 Epoch 结束了，请按照余弦曲线把学习率降一点吧！”
-        scheduler.step()
         # 获取当前刚刚被降下来的学习率
         current_lr = optimizer.param_groups[0]['lr']
 
