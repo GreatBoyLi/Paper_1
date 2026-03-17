@@ -4,9 +4,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import matplotlib.pyplot as plt  # 【新增 1】导入绘图库
 
-# 导入我们自己写的模块
+# 导入自己写的模块
 from dataset.dataset import SatellitePVDataset
 from model.mymodel import MultiModalPVNet
 from utils.config import load_config, setup_logger, plot_metrics_curve, plot_loss_curve
@@ -38,6 +37,9 @@ TRAIN_RATIO = 0.8
 VAL_RATIO = 0.2
 SELF_DEPTH = 3
 CROSS_DEPTH = 3
+FINAL_DIM = 64
+TRANSFORMER_DIM = 128
+HEADS = 4
 
 # 硬件设置
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -170,7 +172,9 @@ def main():
     logger.info(f"✅ 数据集加载完成: 训练集 {len(train_dataset)} 样本, 验证集 {len(val_dataset)} 样本")
 
     model = MultiModalPVNet(
-        final_dim=128,
+        final_dim=FINAL_DIM,
+        transformer_dim=TRANSFORMER_DIM,
+        heads=HEADS,
         self_depth=SELF_DEPTH,
         cross_depth=CROSS_DEPTH,
         output_seq_len=4,  # 预测未来4个时间步
