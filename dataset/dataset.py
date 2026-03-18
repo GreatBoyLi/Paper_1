@@ -88,6 +88,10 @@ class SatellitePVDataset(Dataset):
         # 4. 获取图像数据
         hist_timestamps = self.data.index[hist_start:hist_end]
         images = []
+
+        last_valid_img = None  # 🌟 增加一个缓存，用于前向填充
+        SAFE_CLEAR_SKY_TEMP = 285.0
+
         for ts in hist_timestamps:
             file_name = f"sat_15min_{ts.strftime('%Y%m%d_%H%M')}.npy"
 
@@ -109,17 +113,28 @@ class SatellitePVDataset(Dataset):
 
                     # 如果这整张图彻彻底底全坏了（比如全屏 NaN）
                     if np.isnan(valid_mean):
-                        valid_mean = 175.0  # 用背景物理下限兜底
-                    # 将所有的 NaN 和 Inf 替换为这个安全的平均值
-                    img = np.nan_to_num(img, nan=valid_mean, posinf=valid_mean, neginf=valid_mean)
-                # ==========================================
-                img = (img - 175.0) / (340.0 - 175.0)
-                # 极限防爆：防止极个别数值归一化后越界
-                img = np.clip(img, 0.0, 1.0)
-                img = np.expand_dims(img, axis=0)
+                        # 局部兜底：如果整张图全 NaN，退化为使用上一张图，或者晴空背景
+                        img = last_valid_img if last_valid_img is not None else np.full((1, 96, 96),
+                                                                                        SAFE_CLEAR_SKY_TEMP,
+                                                                                        dtype=np.float32)
+                    else:
+                        img = np.nan_to_num(img, nan=valid_mean, posinf=valid_mean, neginf=valid_mean)
+                last_valid_img = img  # 更新缓存
             else:
-                # 🌟 全天候模式：找不到图大概率是晚上不拍了，直接全黑填充！
-                img = np.zeros((1, 96, 96), dtype=np.float32)
+                # 🌟 找不到文件时的全局兜底逻辑
+                if last_valid_img is not None:
+                    img = last_valid_img  # 策略一：用前一时刻的图顶替 (云的惯性)
+                else:
+                    # 策略二：连前一时刻也没有，只能给一个安全的晴空温度背景
+                    img = np.full((1, 96, 96), SAFE_CLEAR_SKY_TEMP, dtype=np.float32)
+
+            # ==========================================
+            img = (img - 180.0) / (330.0 - 180.0)
+            # 极限防爆：防止极个别数值归一化后越界
+            img = np.clip(img, 0.0, 1.0)
+            # 如果原图没有通道维度，在这里补上
+            if len(img.shape) == 2:
+                img = np.expand_dims(img, axis=0)
 
             images.append(img)
 
