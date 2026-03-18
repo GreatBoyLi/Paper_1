@@ -41,12 +41,10 @@ class SatellitePVDataset(Dataset):
             raise ValueError(f"不支持的 mode: {mode}")
 
         # ==========================================
-        # 🌟 核心修改 1：严格的时间连续性校验
-        # 允许跨夜，但绝对不允许中间缺失数据 (比如设备断电少了一天)
+        # 严格的时间连续性校验
         # ==========================================
         self.valid_indices = []
         total_len = self.input_len + self.output_len
-        # 15分钟分辨率下，N个点的时间跨度应该是 (N-1)*15 分钟
         expected_time_delta = pd.Timedelta(minutes=15 * (total_len - 1))
 
         max_possible_idx = len(self.data) - total_len
@@ -54,106 +52,115 @@ class SatellitePVDataset(Dataset):
             start_time = self.data.index[i]
             end_time = self.data.index[i + total_len - 1]
 
-            # 只有严格连续的时间段，才被认为是有效样本
             if end_time - start_time == expected_time_delta:
                 self.valid_indices.append(i)
 
         print(f"[{mode}] 数据集加载完成 | 原始行数: {len(self.data)} | 严格连续的有效样本数: {len(self.valid_indices)}")
 
     def __len__(self):
-        # 返回有效样本的数量
         return len(self.valid_indices)
 
+    # ==========================================
+    # 🌟 新增：动态获取安全的晴空背景温度
+    # ==========================================
+    def _get_safe_clear_sky_temp(self, timestamp):
+        """
+        根据时间戳判断南半球干旱区的季节和昼夜，返回合理的背景亮温兜底值 (K)。
+        注意：此处假设 timestamp 为当地时间 (Local Time)。
+        """
+        month = timestamp.month
+        hour = timestamp.hour
+
+        # 1. 判断季节 (南半球)
+        if month in [11, 12, 1, 2, 3]:
+            season = 'summer'
+        elif month in [5, 6, 7, 8, 9]:
+            season = 'winter'
+        else:
+            season = 'transition'  # 春秋过渡季
+
+        # 2. 判断昼夜 (粗略以早7点到晚18点为白天)
+        is_day = 7 <= hour <= 18
+
+        # 3. 返回对应的典型晴空地表亮温兜底值
+        if season == 'summer':
+            return 325.0 if is_day else 295.0
+        elif season == 'winter':
+            return 295.0 if is_day else 275.0
+        else:
+            return 310.0 if is_day else 285.0
+
     def __getitem__(self, idx):
-        # ==========================================
-        # 🌟 获取校验过安全的真实行号
-        # ==========================================
         real_idx = self.valid_indices[idx]
 
-        # 1. 切片索引
         hist_start = real_idx
         hist_end = real_idx + self.input_len
         future_end = hist_end + self.output_len
 
-        # 2. 获取数值特征 (Power, Zenith, GHI)
+        # 获取数值特征和预测目标
         features = ['Power_Norm', 'Clear_Sky_GHI', 'Solar_Zenith']
         x_numeric = self.data.iloc[hist_start:hist_end][features].values
-
-        # 3. 获取预测目标 (未来功率)
         y_power = self.data.iloc[hist_end:future_end]['Power_Norm'].values
-
-        # 🌟 核心修改 2：提取预测时间段的太阳天顶角，用于给 Loss 戴面具
         y_zenith = self.data.iloc[hist_end:future_end]['Solar_Zenith'].values
 
-        # 4. 获取图像数据
+        # 获取图像数据
         hist_timestamps = self.data.index[hist_start:hist_end]
         images = []
-
-        last_valid_img = None  # 🌟 增加一个缓存，用于前向填充
-        SAFE_CLEAR_SKY_TEMP = 285.0
+        last_valid_img = None
 
         for ts in hist_timestamps:
-            file_name = f"sat_15min_{ts.strftime('%Y%m%d_%H%M')}.npy"
+            # 🌟 每次循环都根据当前时间戳获取动态兜底温度
+            current_safe_temp = self._get_safe_clear_sky_temp(ts)
 
-            yyyy = ts.strftime("%Y")
-            mm = ts.strftime("%m")
-            dd = ts.strftime("%d")
+            file_name = f"sat_15min_{ts.strftime('%Y%m%d_%H%M')}.npy"
+            yyyy, mm, dd = ts.strftime("%Y"), ts.strftime("%m"), ts.strftime("%d")
             yyyymm = f"{yyyy}{mm}"
             file_path = os.path.join(self.satellite_dir, yyyymm, dd, file_name)
 
             if os.path.exists(file_path):
-                # 读取并归一化
                 img = np.load(file_path).astype(np.float32)
-                # ==========================================
-                # 🛡️ 免疫系统开启：排查并消灭 NaN 和 Inf
-                # ==========================================
-                if np.isnan(img).any() or np.isinf(img).any():
-                    # 策略 A：用整张图的有效平均值来填补坏掉的像素（最科学的物理做法）
-                    valid_mean = np.nanmean(img[~np.isinf(img)])
 
-                    # 如果这整张图彻彻底底全坏了（比如全屏 NaN）
+                # 处理 NaN 和 Inf
+                if np.isnan(img).any() or np.isinf(img).any():
+                    valid_mean = np.nanmean(img[~np.isinf(img)])
                     if np.isnan(valid_mean):
-                        # 局部兜底：如果整张图全 NaN，退化为使用上一张图，或者晴空背景
-                        img = last_valid_img if last_valid_img is not None else np.full((1, 96, 96),
-                                                                                        SAFE_CLEAR_SKY_TEMP,
-                                                                                        dtype=np.float32)
+                        img = last_valid_img if last_valid_img is not None else np.full(
+                            (1, 96, 96), current_safe_temp, dtype=np.float32
+                        )
                     else:
                         img = np.nan_to_num(img, nan=valid_mean, posinf=valid_mean, neginf=valid_mean)
-                last_valid_img = img  # 更新缓存
+                last_valid_img = img
             else:
-                # 🌟 找不到文件时的全局兜底逻辑
+                # 找不到文件时的全局兜底
                 if last_valid_img is not None:
-                    img = last_valid_img  # 策略一：用前一时刻的图顶替 (云的惯性)
+                    img = last_valid_img
                 else:
-                    # 策略二：连前一时刻也没有，只能给一个安全的晴空温度背景
-                    img = np.full((1, 96, 96), SAFE_CLEAR_SKY_TEMP, dtype=np.float32)
+                    img = np.full((1, 96, 96), current_safe_temp, dtype=np.float32)
 
             # ==========================================
-            img = (img - 180.0) / (330.0 - 180.0)
-            # 极限防爆：防止极个别数值归一化后越界
+            # 🌟 同步更新：扩大归一化范围，防止高温地表被截断
+            # ==========================================
+            img = (img - 180.0) / (345.0 - 180.0)
             img = np.clip(img, 0.0, 1.0)
-            # 如果原图没有通道维度，在这里补上
+
             if len(img.shape) == 2:
                 img = np.expand_dims(img, axis=0)
 
             images.append(img)
 
-        # 堆叠 -> (Seq, C, H, W)
         x_images = np.stack(images, axis=0)
 
-        # 🌟 核心修改 3：在返回的字典中加入 y_zenith
         return {
-            'x_images': torch.from_numpy(x_images).float(),  # Shape: (16, 1, 96, 96)
-            'x_numeric': torch.from_numpy(x_numeric).float(),  # Shape: (16, 3)
-            'y': torch.from_numpy(y_power).float(),  # Shape: (4,)
-            'y_zenith': torch.from_numpy(y_zenith).float()  # Shape: (4,)
+            'x_images': torch.from_numpy(x_images).float(),
+            'x_numeric': torch.from_numpy(x_numeric).float(),
+            'y': torch.from_numpy(y_power).float(),
+            'y_zenith': torch.from_numpy(y_zenith).float()
         }
 
 
 if __name__ == "__main__":
     # 加载配置
     config = load_config("../config/config.yaml")
-    # 测试代码
     csv_file = config["file_paths"]["series_file"]
     sat_dir = config["file_paths"]["aligned_satellite_path"]
 
@@ -164,6 +171,6 @@ if __name__ == "__main__":
             print(f"Input Image: {sample['x_images'].shape}")
             print(f"Input Numeric: {sample['x_numeric'].shape}")
             print(f"Target Power: {sample['y'].shape}")
-            print(f"Target Zenith: {sample['y_zenith'].shape}")  # 测试新加的维度
+            print(f"Target Zenith: {sample['y_zenith'].shape}")
     else:
         print("请先生成 CSV 文件")
